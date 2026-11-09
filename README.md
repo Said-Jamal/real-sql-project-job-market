@@ -1,4 +1,3 @@
-# real-sql-project-job-market
 # Real SQL: Vakansiyadan Bazar Trendinə
 
 Kursor Education-ın keçirdiyi "Real SQL" workshop-unda həll etdiyim tapşırıqlar. Məqsəd Azərbaycan əmək bazarının strukturunu (sektor bölgüsü, maaş səviyyəsi, tələb olunan bacarıqlar, şəhər üzrə sıxlıq) SQL ilə açmaqdır.
