@@ -1,0 +1,200 @@
+ALTER SESSION SET CURRENT_SCHEMA = KURSOR;
+
+SELECT * FROM companies;
+SELECT * FROM vacancies;
+
+------------------------------  BLOK 1  ------------------------------------------
+
+--- Task 1
+/* HR komandası bazarın strukturunu görmək istəyir:
+   bazarda mövcud olan bütün fərqli sektor və peşələrin siyahısını tərtib edin. */
+
+SELECT DISTINCT
+      SECTOR,
+      PROFESSION
+FROM  VACANCIES
+ORDER BY
+      SECTOR ASC,
+      PROFESSION ASC;
+
+SELECT
+      SECTOR,
+      PROFESSION
+FROM  VACANCIES
+GROUP BY
+      SECTOR,
+      PROFESSION
+ORDER BY
+      SECTOR ASC,
+      PROFESSION ASC;
+
+-- Task 2
+/* Regional işə cəlb siyasəti hazırlanır :
+   Bakıdan kənar şəhərlərdəki ən yeni vakansiyaları tapın. */
+
+SELECT
+     SOURCE_SITE,
+     JOB_TITLE,
+     CITY,
+     POSTED_DATE
+FROM VACANCIES
+WHERE CITY != 'Bakı'
+ORDER BY POSTED_DATE DESC NULLS LAST;
+
+-------------------------------  BLOK 2  -----------------------------------------
+
+-- Task 3 - Hansı sektor ən çox vakansiya açır ? Nəticəni azalan sıra ilə göstərin.
+
+SELECT
+     SECTOR,
+     COUNT(*) AS vacancy_count
+FROM VACANCIES
+GROUP BY
+     SECTOR
+ORDER BY
+     vacancy_count DESC;
+
+-- Task 4
+/* Maaşı açıqlanan elanlarda sektor üzrə orta/minimum/maksimum maaşı hesablayın.
+   Statistik cəhətdən etibarlı olsun deyə, 3-dən az elanı olan sektorlar hesabata daxil olmasın. */
+
+SELECT
+     SECTOR,
+     ROUND(AVG((SALARY_MIN + SALARY_MAX) / 2), 2) AS orta_maas,
+     MIN(SALARY_MIN) AS min_maas,
+     MAX(SALARY_MAX) AS max_maas,
+     COUNT(*) AS n
+FROM VACANCIES
+WHERE SALARY_DISCLOSED = 'Y'
+GROUP BY SECTOR
+HAVING COUNT(*) >= 3
+ORDER BY orta_maas DESC;
+
+-- Task 5 - Ən aktiv işəgötürən 10 şirkəti tapın (ən çox elan yerləşdirənlər).
+
+SELECT
+     COMPANY_NAME,
+     COUNT(*) AS vacancy_count
+FROM COMPANIES c
+INNER JOIN VACANCIES v
+      ON c.company_id = v.company_id
+GROUP BY COMPANY_NAME
+ORDER BY vacancy_count DESC
+FETCH FIRST 10 ROWS ONLY;
+
+-------------------------------  BLOK 3  -----------------------------------------
+
+-- Task 6 - Hər sektorda ən yüksək maaşlı 3 vakansiyanı tapın (sektor rəhbərliyinə hesabat üçün).
+
+WITH s AS (
+SELECT
+     SECTOR,
+     SALARY_MAX,
+     JOB_TITLE,
+     RANK() OVER (PARTITION BY SECTOR ORDER BY SALARY_MAX DESC) AS rnk
+FROM VACANCIES
+WHERE SALARY_DISCLOSED = 'Y')
+
+SELECT SECTOR, JOB_TITLE, SALARY_MAX, rnk
+FROM s
+WHERE rnk <= 3
+ORDER BY SECTOR, rnk;
+
+-- Task 7 - Hər vakansiyanın öz sektorunun orta maaşından nə qədər yüksək/aşağı olduğunu göstərin.
+
+SELECT
+     JOB_TITLE,
+     SECTOR,
+     SALARY_MAX,
+     ROUND(AVG(SALARY_MAX) OVER (PARTITION BY SECTOR), 2) AS sector_avg,
+     ROUND(SALARY_MAX - AVG(SALARY_MAX) OVER (PARTITION BY SECTOR), 2) AS diff
+FROM VACANCIES
+WHERE SALARY_DISCLOSED = 'Y'
+ORDER BY SECTOR DESC;
+
+-- Task 8 - Şəhərləri vakansiya sıxlığına görə reytinqləyin.
+-- Qeyd: JOBSEARCH mənbəyində şəhər boşdur, ona görə NULL olanlar xaric edilir.
+
+SELECT
+     CITY,
+     VACANCY_COUNT,
+     DENSE_RANK() OVER (ORDER BY VACANCY_COUNT DESC) AS city_rank
+FROM (
+      SELECT
+           CITY,
+           COUNT(*) AS vacancy_count
+      FROM VACANCIES
+      WHERE CITY IS NOT NULL
+      GROUP BY CITY
+     );
+
+-- Task 9
+/* Vakansiyaları maaş səviyyəsinə görə 4 bərabər qrupa (segment) bölün :
+   "aparıcı seqment" hansı sektorlardan ibarətdir? */
+
+SELECT
+     JOB_TITLE,
+     SECTOR,
+     SALARY_MAX,
+     NTILE(4) OVER (ORDER BY SALARY_MAX ASC) AS salary_segment
+FROM VACANCIES
+WHERE SALARY_DISCLOSED = 'Y'
+ORDER BY salary_segment DESC, SALARY_MAX DESC;
+
+-- Aparıcı seqment (4) hansı sektorlardan ibarətdir:
+SELECT
+     SECTOR,
+     COUNT(*) AS n
+FROM (
+      SELECT
+           SECTOR,
+           NTILE(4) OVER (ORDER BY SALARY_MAX ASC) AS salary_segment
+      FROM VACANCIES
+      WHERE SALARY_DISCLOSED = 'Y'
+     )
+WHERE salary_segment = 4
+GROUP BY SECTOR
+ORDER BY n DESC;
+
+-------------------------------  BLOK 4  -----------------------------------------
+
+-- Task 10 - Tələblər bölməsində "Oracle" və ya "SQL" sözü keçən vakansiyaların sayını və bazardakı faizini hesablayın.
+
+WITH V AS (SELECT COUNT(*) AS CNT FROM VACANCIES)
+
+SELECT
+        V.CNT,
+        COUNT(*) AS oracle_sql_count,
+        ROUND(100 * COUNT(*) / V.CNT, 1) AS pct_of_market
+FROM VACANCIES CROSS JOIN V
+WHERE REGEXP_LIKE(REQUIREMENTS_TEXT, 'Oracle|SQL', 'i')
+GROUP BY V.CNT;
+
+-- Task 11
+/* Ən çox tələb olunan 5 texniki bacarığı (Python, SQL, Excel, Linux, Rus dili və s.) tapın.
+   Hər biri üçün neçə vakansiyada keçdiyini göstərin. */
+
+SELECT skill, n
+FROM (
+      SELECT 'Python' AS skill, COUNT(*) AS n
+      FROM VACANCIES
+      WHERE REGEXP_LIKE(REQUIREMENTS_TEXT, 'Python', 'i')
+      UNION ALL
+      SELECT 'Excel', COUNT(*)
+      FROM VACANCIES
+      WHERE REGEXP_LIKE(REQUIREMENTS_TEXT, 'Excel', 'i')
+      UNION ALL
+      SELECT 'SQL', COUNT(*)
+      FROM VACANCIES
+      WHERE REGEXP_LIKE(REQUIREMENTS_TEXT, 'SQL', 'i')
+      UNION ALL
+      SELECT 'Linux', COUNT(*)
+      FROM VACANCIES
+      WHERE REGEXP_LIKE(REQUIREMENTS_TEXT, 'Linux', 'i')
+      UNION ALL
+      SELECT 'Ingilis dili', COUNT(*)
+      FROM VACANCIES
+      WHERE REGEXP_LIKE(REQUIREMENTS_TEXT, 'İngilis|Ingilis', 'i')
+     )
+ORDER BY n DESC
+FETCH FIRST 5 ROWS ONLY;
